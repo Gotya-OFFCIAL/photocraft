@@ -283,10 +283,10 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
 pub fn toolbar_needs_double(slots: usize, sections: usize, bx: f32, pro: bool, avail_h: f32) -> bool {
     let pitch = bx + 3.0;
     let needed = if pro {
-        // margins + header + slots + "…" + gap + chips (38 + swap row) + gap + 2 buttons
-        16.0 + 21.0 + (slots + 1) as f32 * pitch + 8.0 + 59.0 + 8.0 + 2.0 * pitch
+        // margins + header + slots + "…" + gap + colour chips + gap + 2 buttons
+        16.0 + 21.0 + (slots + 1) as f32 * pitch + 8.0 + chips_height(true) + 8.0 + 2.0 * pitch
     } else {
-        16.0 + slots as f32 * pitch + sections.saturating_sub(1) as f32 * 12.0 + 14.0 + 59.0
+        16.0 + slots as f32 * pitch + sections.saturating_sub(1) as f32 * 12.0 + 14.0 + chips_height(false)
     };
     needed > avail_h
 }
@@ -295,17 +295,45 @@ fn c32(c: [f32; 4]) -> Color32 {
     Color32::from_rgba_unmultiplied((c[0] * 255.0) as u8, (c[1] * 255.0) as u8, (c[2] * 255.0) as u8, (c[3] * 255.0) as u8)
 }
 
+/// Colour chips: chip size and the background chip's offset (points).
+fn chip_metrics(pro: bool) -> (f32, f32) {
+    if pro { (18.0, 10.0) } else { (21.0, 12.0) }
+}
+
+/// Height of the default-colours and swap icons over the chips.
+const CHIP_ICON: f32 = 13.0;
+
+/// Height of the colour chips block.
+fn chips_height(pro: bool) -> f32 {
+    let (chip, step) = chip_metrics(pro);
+    CHIP_ICON + 3.0 + chip + step
+}
+
+/// Photoshop's foreground / background colour chips: the Default Colors (D) and Switch Colors (X)
+/// icons above them, the foreground chip over the background one, all centred in the toolbar
+/// column and kept inside it.
 fn color_chips(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
-    let (rect, _) = ui.allocate_exact_size(vec2(36.0, 38.0), Sense::hover());
-    let bg = Rect::from_min_size(rect.min + vec2(13.0, 13.0), vec2(21.0, 21.0));
-    let fg = Rect::from_min_size(rect.min + vec2(2.0, 2.0), vec2(21.0, 21.0));
+    let (chip, step) = chip_metrics(t.pro);
+    let group = chip + step;
+    let w = ui.available_width().max(group);
+    let (rect, _) = ui.allocate_exact_size(vec2(w, chips_height(t.pro)), Sense::hover());
+    let left = (rect.left() + (w - group) / 2.0).round();
+    let fg = Rect::from_min_size(pos2(left, rect.top() + CHIP_ICON + 3.0), vec2(chip, chip));
+    let bg = fg.translate(vec2(step, step));
+    let radius = t.radius_sm.min(3.0);
     let p = ui.painter();
-    p.rect_filled(bg, 5.0, c32(app.session.tools.background));
-    p.rect_stroke(bg, 5.0, Stroke::new(1.0, t.field_border), StrokeKind::Outside);
-    p.rect_filled(fg, 5.0, c32(app.session.tools.foreground));
-    p.rect_stroke(fg, 5.0, Stroke::new(1.5, t.chrome), StrokeKind::Outside);
-    p.rect_stroke(fg, 5.0, Stroke::new(1.0, t.field_border), StrokeKind::Inside);
+    let frame = |r: Rect| {
+        // A light line inside a dark one, so any colour reads against the toolbar.
+        p.rect_stroke(r, radius, Stroke::new(1.0, t.text.gamma_multiply(0.9)), StrokeKind::Inside);
+        p.rect_stroke(r, radius, Stroke::new(1.0, t.field_border), StrokeKind::Outside);
+    };
+    p.rect_filled(bg, radius, c32(app.session.tools.background));
+    frame(bg);
+    // The foreground chip sits on the background one, a toolbar-coloured gap between them.
+    p.rect_filled(fg.expand(2.0), radius + 2.0, t.chrome);
+    p.rect_filled(fg, radius, c32(app.session.tools.foreground));
+    frame(fg);
     // Photoshop: clicking a chip opens the Color Picker for that colour.
     let bg_resp = ui.interact(bg, ui.id().with("bgchip"), Sense::click());
     let fg_resp = ui.interact(fg, ui.id().with("fgchip"), Sense::click());
@@ -314,15 +342,50 @@ fn color_chips(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     } else if bg_resp.on_hover_text(tl!("Set background color")).clicked() {
         crate::color_picker_ui::open(app, "background");
     }
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        if icons::button(ui, "arrow-left-right", 18.0, false, tl!("Swap colours (X)")).clicked() {
-            let _ = app.run("tools.swapColors", json!({}));
+    // Default Colors at the left, Switch Colors at the right, over the chips.
+    let icon = |x: f32| Rect::from_min_size(pos2(x, rect.top()), vec2(CHIP_ICON, CHIP_ICON));
+    let (dr, sr) = (icon(left), icon(left + group - CHIP_ICON));
+    let d = ui.interact(dr, ui.id().with("default-colors"), Sense::click());
+    let s = ui.interact(sr, ui.id().with("swap-colors"), Sense::click());
+    let p = ui.painter();
+    for (r, resp) in [(dr, &d), (sr, &s)] {
+        if resp.hovered() {
+            p.rect_filled(r.expand(2.0), radius, t.hover);
         }
-        if icons::button(ui, "contrast", 18.0, false, tl!("Default colours (D)")).clicked() {
-            let _ = app.run("tools.defaultColors", json!({}));
-        }
-    });
+    }
+    let ink = |resp: &egui::Response| if resp.hovered() { t.text } else { t.icon };
+    // Default Colors: a small black chip over a small white one.
+    let small = 7.0;
+    let (b, w) = (Rect::from_min_size(dr.min + vec2(1.0, 1.0), vec2(small, small)), Rect::from_min_size(dr.min + vec2(5.0, 5.0), vec2(small, small)));
+    p.rect_filled(w, 1.0, Color32::WHITE);
+    p.rect_stroke(w, 1.0, Stroke::new(1.0, ink(&d)), StrokeKind::Inside);
+    p.rect_filled(b.expand(1.0), 1.5, t.chrome);
+    p.rect_filled(b, 1.0, Color32::BLACK);
+    p.rect_stroke(b, 1.0, Stroke::new(1.0, ink(&d)), StrokeKind::Inside);
+    // Switch Colors: a quarter-circle arrow with a head at each end.
+    let stroke = Stroke::new(1.3, ink(&s));
+    let (c, rad) = (pos2(sr.left() + 2.0, sr.bottom() - 1.0), sr.width() - 4.0);
+    let arc: Vec<_> = (0..=8)
+        .map(|i| {
+            let a = std::f32::consts::FRAC_PI_2 * i as f32 / 8.0;
+            c + vec2(rad * a.sin(), -rad * a.cos())
+        })
+        .collect();
+    let (start, end) = (arc[0], arc[arc.len() - 1]);
+    p.add(egui::Shape::line(arc, stroke));
+    let head = 3.0;
+    p.line_segment([start, start + vec2(head, -head)], stroke);
+    p.line_segment([start, start + vec2(head, head)], stroke);
+    p.line_segment([end, end + vec2(-head, -head)], stroke);
+    p.line_segment([end, end + vec2(head, -head)], stroke);
+    d.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Default colours (D)")));
+    s.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Swap colours (X)")));
+    if s.on_hover_text(tl!("Swap colours (X)")).clicked() {
+        let _ = app.run("tools.swapColors", json!({}));
+    }
+    if d.on_hover_text(tl!("Default colours (D)")).clicked() {
+        let _ = app.run("tools.defaultColors", json!({}));
+    }
 }
 
 // ----------------------------------------------------------------------------- title bar
