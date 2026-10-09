@@ -1482,7 +1482,7 @@ fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             ui.add_space(4.0);
             for (kind, icon, tip) in [
                 ("pixel", "image", tl!("Filter for pixel layers")),
-                ("adjustment", "contrast", tl!("Filter for adjustment layers")),
+                ("adjustment", "adjustment-layer", tl!("Filter for adjustment layers")),
                 ("type", "type", tl!("Filter for type layers")),
                 ("shape", "square", tl!("Filter for shape layers")),
                 ("smart", "app-window", tl!("Filter for smart objects")),
@@ -1577,7 +1577,7 @@ fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     // Top of the stack first, groups above their contents, closed groups' contents hidden (#126).
     let rows = crate::layer_tree_ui::display_rows(&doc, !app.ui.layer_filter.is_empty());
     let ctx = ui.ctx().clone();
-    let footer = 38.0;
+    let footer = widgets::footer_height(ui) + ui.spacing().item_spacing.y;
     let fill = ui.available_height() > footer + 60.0;
     let rows_h = if fill { ui.available_height() - footer } else { f32::INFINITY };
     egui::ScrollArea::vertical()
@@ -1648,79 +1648,75 @@ fn layers(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     if ctx.input(|i| i.pointer.any_released()) {
         ctx.data_mut(|d| d.remove::<u64>(egui::Id::new("layer-drag")));
     }
-    ui.add_space(4.0);
-    widgets::hairline(ui);
-    ui.add_space(2.0);
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 2.0;
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let trash = icons::button(ui, "trash", 26.0, false, tl!("Delete layer"));
-            if trash.clicked() {
-                actions.push(("layer.delete".into(), json!({})));
-            }
-            actions.extend(footer_drop(ui, &trash, footer_drag, "layer.delete"));
-            let new_layer = icons::button(ui, "square-plus", 26.0, false, &crate::shortcuts::tip_label(app, "Create a new layer", "layer.new.layer"));
-            if new_layer.clicked() {
-                actions.push(("layer.new.layer".into(), json!({})));
-            }
-            actions.extend(footer_drop(ui, &new_layer, footer_drag, "layer.duplicate"));
-            let group = icons::button(ui, "folder", 26.0, false, tl!("Create a new group"));
-            if group.clicked() {
-                actions.push(("layer.new.group".into(), json!({})));
-            }
-            actions.extend(footer_drop(ui, &group, footer_drag, "layer.groupLayers"));
-            let adj = icons::button(ui, "contrast", 26.0, false, tl!("Create new fill or adjustment layer"));
-            egui::Popup::menu(&adj).show(|ui| {
-                ui.set_min_width(190.0);
-                for c in photocraft_engine::command_specs().iter().filter(|c| c.id.starts_with("layer.newAdjustmentLayer.")) {
-                    if ui.button(tl!(c.label).trim_end_matches('…')).clicked() {
-                        actions.push((c.id.into(), json!({})));
-                        ui.close();
-                    }
-                }
-                ui.separator();
-                if ui.button(tl!("Solid Color…")).clicked() {
-                    actions.push(("layer.newFillLayer.solidColor".into(), json!({})));
+    widgets::panel_footer(ui, |ui| {
+        let trash = icons::button(ui, "trash", 26.0, false, tl!("Delete layer"));
+        if trash.clicked() {
+            actions.push(("layer.delete".into(), json!({})));
+        }
+        actions.extend(footer_drop(ui, &trash, footer_drag, "layer.delete"));
+        let new_layer = icons::button(ui, "square-plus", 26.0, false, &crate::shortcuts::tip_label(app, "Create a new layer", "layer.new.layer"));
+        if new_layer.clicked() {
+            actions.push(("layer.new.layer".into(), json!({})));
+        }
+        actions.extend(footer_drop(ui, &new_layer, footer_drag, "layer.duplicate"));
+        let group = icons::button(ui, "folder", 26.0, false, tl!("Create a new group"));
+        if group.clicked() {
+            actions.push(("layer.new.group".into(), json!({})));
+        }
+        actions.extend(footer_drop(ui, &group, footer_drag, "layer.groupLayers"));
+        let adj = icons::button(ui, "adjustment-layer", 26.0, false, tl!("Create new fill or adjustment layer"));
+        menu_mark(ui, &adj);
+        egui::Popup::menu(&adj).show(|ui| {
+            ui.set_min_width(190.0);
+            for c in photocraft_engine::command_specs().iter().filter(|c| c.id.starts_with("layer.newAdjustmentLayer.")) {
+                if ui.button(tl!(c.label).trim_end_matches('…')).clicked() {
+                    actions.push((c.id.into(), json!({})));
                     ui.close();
                 }
-                if ui.button(tl!("Gradient…")).clicked() {
-                    actions.push(("layer.newFillLayer.gradient".into(), json!({})));
-                    ui.close();
-                }
-            });
-            if icons::button(
-                ui,
-                "square-dot",
-                26.0,
-                false,
-                &crate::i18n::fmt(tl!("Add a mask  (from the selection; {key} inverts)"), &[("key", &crate::shortcuts::pretty("Alt"))]),
-            )
-            .clicked()
-            {
-                let alt = ui.input(|i| i.modifiers.alt);
-                actions.push((crate::layer_menu_ui::add_mask_command(doc.selection.is_some(), alt).into(), json!({})));
             }
-            let fx = fx_button(ui, 26.0, tl!("Add a layer style"));
-            egui::Popup::menu(&fx).show(|ui| {
-                ui.set_min_width(180.0);
-                if ui.button(tl!("Blending Options…")).clicked() {
-                    crate::layer_style::open(app, None);
-                    ui.close();
-                }
-                ui.separator();
-                for &(kind, label) in crate::layer_style::KINDS {
-                    if ui.button(format!("{}…", tl!(label))).clicked() {
-                        crate::layer_style::open(app, Some(kind));
-                        ui.close();
-                    }
-                }
-            });
-            // Photoshop's footer starts with Link Layers (enabled with two or more layers selected).
-            let can_link = app.session.is_enabled("layer.linkLayers");
-            if ui.add_enabled_ui(can_link, |ui| icons::button(ui, "link", 26.0, false, tl!("Link layers"))).inner.clicked() {
-                actions.push(("layer.linkLayers".into(), json!({})));
+            ui.separator();
+            if ui.button(tl!("Solid Color…")).clicked() {
+                actions.push(("layer.newFillLayer.solidColor".into(), json!({})));
+                ui.close();
+            }
+            if ui.button(tl!("Gradient…")).clicked() {
+                actions.push(("layer.newFillLayer.gradient".into(), json!({})));
+                ui.close();
             }
         });
+        if icons::button(
+            ui,
+            "layer-mask",
+            26.0,
+            false,
+            &crate::i18n::fmt(tl!("Add a mask  (from the selection; {key} inverts)"), &[("key", &crate::shortcuts::pretty("Alt"))]),
+        )
+        .clicked()
+        {
+            let alt = ui.input(|i| i.modifiers.alt);
+            actions.push((crate::layer_menu_ui::add_mask_command(doc.selection.is_some(), alt).into(), json!({})));
+        }
+        let fx = fx_button(ui, 26.0, tl!("Add a layer style"));
+        menu_mark(ui, &fx);
+        egui::Popup::menu(&fx).show(|ui| {
+            ui.set_min_width(180.0);
+            if ui.button(tl!("Blending Options…")).clicked() {
+                crate::layer_style::open(app, None);
+                ui.close();
+            }
+            ui.separator();
+            for &(kind, label) in crate::layer_style::KINDS {
+                if ui.button(format!("{}…", tl!(label))).clicked() {
+                    crate::layer_style::open(app, Some(kind));
+                    ui.close();
+                }
+            }
+        });
+        // Photoshop's footer starts with Link Layers (enabled with two or more layers selected).
+        let can_link = app.session.is_enabled("layer.linkLayers");
+        if ui.add_enabled_ui(can_link, |ui| icons::button(ui, "link-2", 26.0, false, tl!("Link layers"))).inner.clicked() {
+            actions.push(("layer.linkLayers".into(), json!({})));
+        }
     });
     for (id, p) in actions {
         if id == "ui.maskTarget" {
@@ -1772,6 +1768,16 @@ fn footer_label(command: &str) -> &'static str {
         "layer.duplicate" => tl!("Create a new layer"),
         _ => tl!("Create a new group"),
     }
+}
+
+/// The small triangle at the corner of a footer button that opens a menu (Photoshop's fx and
+/// New Fill or Adjustment Layer buttons).
+fn menu_mark(ui: &egui::Ui, button: &egui::Response) {
+    let t = Tokens::get(ui.ctx());
+    let c = button.rect.center() + vec2(7.0, 8.5);
+    let color = if button.hovered() { t.text } else { t.icon };
+    let tip = vec![pos2(c.x - 3.0, c.y - 1.5), pos2(c.x + 3.0, c.y - 1.5), pos2(c.x, c.y + 1.5)];
+    ui.painter().add(egui::Shape::convex_polygon(tip, color, Stroke::NONE));
 }
 
 /// Photoshop's italic "fx" footer button (no icon-font equivalent).
@@ -2139,7 +2145,7 @@ fn history(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let mut target: Option<isize> = None;
     let all = entries.iter().map(|e| (e.clone(), false)).chain(redo.iter().map(|e| (e.clone(), true)));
     // The dock gives History a fixed height: the rows scroll above the footer.
-    let footer = if t.pro { 34.0 } else { 0.0 };
+    let footer = if t.pro { widgets::footer_height(ui) + ui.spacing().item_spacing.y } else { 0.0 };
     let max_h = (ui.available_height() - footer).max(40.0);
     egui::ScrollArea::vertical().id_salt("history-rows").max_height(max_h).auto_shrink([false, false]).show(ui, |ui| {
         for (i, (e, is_redo)) in all.enumerate() {
@@ -2172,14 +2178,10 @@ fn history(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         }
     });
     if t.pro {
-        widgets::hairline(ui);
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let _ = icons::button(ui, "trash", 24.0, false, tl!("Delete current state"));
-                let _ = icons::button(ui, "scan", 24.0, false, tl!("Create new snapshot"));
-                let _ = icons::button(ui, "file-plus", 24.0, false, tl!("Create new document from current state"));
-            });
+        widgets::panel_footer(ui, |ui| {
+            let _ = icons::button(ui, "trash", 26.0, false, tl!("Delete current state"));
+            let _ = icons::button(ui, "scan", 26.0, false, tl!("Create new snapshot"));
+            let _ = icons::button(ui, "file-plus", 26.0, false, tl!("Create new document from current state"));
         });
     }
     // An open Free Transform owns Undo (transform_tool::intercept): stepping the document's history under
