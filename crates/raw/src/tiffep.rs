@@ -164,8 +164,10 @@ pub(crate) fn decode(t: &Tiff, format: RawFormat, limits: &Limits) -> Result<Sen
         BlackLevels { rows: 2, cols: 2, values: v.to_vec(), delta_h: Vec::new(), delta_v: Vec::new() }
     } else if craw {
         // cRAW files of the first generation (an ILCE-7 writes none) carry no
-        // BlackLevel tag; the tone curve maps the black code to 512, so the
-        // decoded data has a 512 black level (see `sony.rs`).
+        // BlackLevel tag; the tone curve maps the black code to 512, so their
+        // decoded data has a 512 black level (see `sony.rs`). Other tag-less
+        // bodies sit higher (a DSC-RX0's darkest samples are near 800), so 512
+        // is a floor, still far closer than 0.
         BlackLevels::uniform(512.0)
     } else if nikon.is_some() {
         // Nikon bodies that write no BlackLevel tag subtract the black level in camera: a D3200
