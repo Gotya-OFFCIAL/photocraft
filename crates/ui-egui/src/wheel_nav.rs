@@ -1,7 +1,8 @@
 //! Mouse wheel and trackpad navigation over the canvas (#293, #635), as in Photoshop:
 //!
 //! - The wheel scrolls up and down; ⇧ or ⌘/Ctrl + wheel scrolls sideways.
-//! - ⌥/Alt + wheel zooms around the pointer in gentle steps, about 5% per wheel notch.
+//! - ⌥/Alt + wheel zooms around the pointer, ×1.1 a notch (measured on Photoshop 25.4: 100 %,
+//!   110 %, 121 %, … up to exactly 12800 %).
 //! - Preferences › General › Zoom with Scroll Wheel swaps the two: the wheel zooms and
 //!   ⌥/Alt + wheel scrolls.
 //! - A trackpad pinch zooms around the pointer.
@@ -19,8 +20,8 @@
 
 use egui::{Context, Event, Id, Modifiers, MouseWheelUnit, RawInput, Vec2};
 
-/// Zoom factor of one wheel notch with ⌥/Alt held.
-pub const ALT_NOTCH: f32 = 1.05;
+/// Zoom factor of one wheel notch with ⌥/Alt held (Photoshop's).
+pub const ALT_NOTCH: f32 = 1.1;
 
 /// A Ctrl + wheel event this soon (seconds) after a pinch step still belongs to the pinch, even
 /// when it happens to be a whole notch.
@@ -60,7 +61,7 @@ pub fn classify(i: Input) -> Option<Wheel> {
     }
     let f = match (i.alt, i.zoom_with_wheel) {
         (true, false) => {
-            // egui folds a scroll with Alt held into y. One notch (`notch` points) is 5%.
+            // egui folds a scroll with Alt held into y. One notch (`notch` points) is ×1.1.
             let notch = if i.notch.is_finite() && i.notch > 0.0 { i.notch } else { 40.0 };
             ALT_NOTCH.powf((i.scroll.y + i.scroll.x) / notch)
         }
@@ -199,11 +200,11 @@ mod tests {
     }
 
     #[test]
-    fn alt_scroll_zooms_five_percent_per_notch() {
+    fn alt_scroll_zooms_ten_percent_per_notch() {
         let Some(Wheel::Zoom(f)) = classify(input(Vec2::new(0.0, 40.0), true)) else { panic!("zoom") };
-        assert!((f - 1.05).abs() < 1e-5, "{f}");
+        assert!((f - 1.1).abs() < 1e-5, "{f}");
         let Some(Wheel::Zoom(f)) = classify(input(Vec2::new(0.0, -40.0), true)) else { panic!("zoom") };
-        assert!((f - 1.0 / 1.05).abs() < 1e-5, "{f}");
+        assert!((f - 1.0 / 1.1).abs() < 1e-5, "{f}");
         // Smoothed over frames, the parts multiply back to one notch.
         let parts = [12.0, 16.0, 8.0, 4.0];
         let total: f32 = parts
@@ -213,7 +214,7 @@ mod tests {
                 _ => 1.0,
             })
             .product();
-        assert!((total - 1.05).abs() < 1e-4, "{total}");
+        assert!((total - 1.1).abs() < 1e-4, "{total}");
     }
 
     #[test]
@@ -245,7 +246,7 @@ mod tests {
             assert!(near(pan, Vec2::new(40.0, 0.0)) && zoom == 1.0, "{m:?} + wheel scrolls sideways: {pan:?} {zoom}");
         }
         let (pan, zoom) = one(Modifiers::ALT);
-        assert!(pan == Vec2::ZERO && (zoom - 1.05).abs() < 1e-4, "⌥ + wheel zooms 5%: {pan:?} {zoom}");
+        assert!(pan == Vec2::ZERO && (zoom - 1.1).abs() < 1e-4, "⌥ + wheel zooms ×1.1: {pan:?} {zoom}");
         // Zoom with Scroll Wheel on: swapped.
         let (pan, zoom) = gesture(vec![vec![wheel(notch, Modifiers::ALT)]], true, false);
         assert!(near(pan, Vec2::new(0.0, 40.0)) && zoom == 1.0, "{pan:?} {zoom}");
