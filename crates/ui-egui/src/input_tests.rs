@@ -390,7 +390,7 @@ fn the_wheel_reaches_12800_percent_and_stops_dead_there() {
 }
 
 #[test]
-fn alt_scroll_zooms_gently_around_the_pointer() {
+fn alt_scroll_zooms_in_steps_around_the_pointer() {
     let mut h = harness();
     let r = h.state().last_canvas_rect;
     let p = pos2(r.center().x + 120.0, r.center().y - 70.0);
@@ -398,11 +398,15 @@ fn alt_scroll_zooms_gently_around_the_pointer() {
     h.run_steps(2);
     let (z0, d0) = (zoom(&h), doc_at(&h, p));
     // One notch with ⌥ held: ×1.1 (Photoshop), the point under the pointer stays put. The modifiers are
-    // released right after the event, while egui still smooths the notch over later frames.
+    // released right after the event, while egui still smooths the notch over later frames, which
+    // must neither ease the zoom nor turn into a pan (#1490).
     wheel(&h, 1.0, Modifiers::ALT);
+    h.run_steps(2);
+    let at_once = zoom(&h);
     h.run_steps(40);
     let (z1, d1) = (zoom(&h), doc_at(&h, p));
     assert!((z1 / z0 - 1.1).abs() < 1e-3, "one ⌥ notch is ×1.1: {z0} -> {z1}");
+    assert_eq!(at_once, z1, "the notch is applied the frame it arrives, with no easing");
     assert!((d1[0] - d0[0]).abs() < 0.05 && (d1[1] - d0[1]).abs() < 0.05, "centred on the pointer: {d0:?} -> {d1:?}");
     // Three notches back out.
     wheel(&h, -3.0, Modifiers::ALT);
