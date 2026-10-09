@@ -375,6 +375,9 @@ fn dispatch(app: &mut PhotocraftApp, ctx: &egui::Context, req: &ControlRequest) 
                 // Apply (nothing below can fail).
                 if let Some(t) = tool {
                     app.ui.tool = t;
+                    // Each tool keeps its own brush (#218), so switch it in before `brushSize`
+                    // below sets the new tool's size.
+                    crate::paint_mouse::sync_tool_brush(app);
                 }
                 let gradient_before = app.ui.tool_options.clone();
                 if let Some(mode) = gradient_blend {
@@ -771,6 +774,7 @@ pub fn inspect(app: &PhotocraftApp, ctx: &egui::Context) -> Value {
             })
         }),
         "panels": app.ui.panels,
+        "view": app.ui.view,
         "views": app.ui.views,
         "dialogs": dialogs,
         "windows": app.ui.windows,
@@ -930,18 +934,16 @@ mod tests {
         app.ui.tool = Tool::Brush;
         app.sync_views();
 
-        let mut h = egui_kittest::Harness::builder()
-            .with_size(egui::vec2(800.0, 600.0))
-            .build_ui_state(
-                |ui, app: &mut PhotocraftApp| {
-                    let ctx = ui.ctx().clone();
-                    if !ctx.fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
-                        return;
-                    }
-                    egui::CentralPanel::default().show(ui, |ui| crate::canvas::document_area(app, ui));
-                },
-                app,
-            );
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(800.0, 600.0)).build_ui_state(
+            |ui, app: &mut PhotocraftApp| {
+                let ctx = ui.ctx().clone();
+                if !ctx.fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    return;
+                }
+                egui::CentralPanel::default().show(ui, |ui| crate::canvas::document_area(app, ui));
+            },
+            app,
+        );
         PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::default());
         h.run_steps(4);
         let ctx = h.ctx.clone();
@@ -952,12 +954,7 @@ mod tests {
 
         // Right-click with painting tool via ui.pointer opens the brush picker.
         let events = json!([{"kind": "down", "x": 16, "y": 16}, {"kind": "up", "x": 16, "y": 16}]);
-        let result = call(
-            h.state_mut(),
-            &ctx,
-            "ui.pointer",
-            json!({"tool": "Brush", "button": "secondary", "events": events}),
-        );
+        let result = call(h.state_mut(), &ctx, "ui.pointer", json!({"tool": "Brush", "button": "secondary", "events": events}));
         assert_eq!(result["ok"], true);
 
         // Open state: brushPicker reports the picker's screen coordinates.
@@ -974,6 +971,19 @@ mod tests {
 
         let inspected = call(h.state_mut(), &ctx, "ui.inspect", json!({}));
         assert_eq!(inspected["result"]["brushPicker"], Value::Null, "picker closed after Escape");
+    }
+
+    #[test]
+    fn ui_inspect_reports_the_view_preferences() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        let ctx = egui::Context::default();
+        let before = call(&mut app, &ctx, "ui.inspect", json!({}));
+        assert_eq!(before.pointer("/result/view/show/selection_edges"), Some(&json!(true)));
+        assert_eq!(before.pointer("/result/view/screen_mode"), Some(&json!("standard")));
+        assert_eq!(call(&mut app, &ctx, "ui.menu.invoke", json!({"id": "view.show.selectionEdges"}))["ok"], true);
+        let after = call(&mut app, &ctx, "ui.inspect", json!({}));
+        assert_eq!(after.pointer("/result/view/show/selection_edges"), Some(&json!(false)));
+        assert_eq!(after["result"]["view"], json!(app.ui.view));
     }
 
     #[test]
@@ -1141,6 +1151,16 @@ mod tests {
             assert_eq!(app.session.tools.brush.size, 42.5);
             assert_eq!(app.session.journal.len(), journal_len);
         }
+
+        // Each tool keeps its own brush (#218), so `tool` + `brushSize` in one call sets the new
+        // tool's size rather than the one it was carrying.
+        call(&mut app, &ctx, "ui.set", json!({"tool": "eraser", "brushSize": 12.0}));
+        assert_eq!(app.session.tools.brush.size, 12.0, "the Eraser's own size");
+        call(&mut app, &ctx, "ui.set", json!({"tool": "brush"}));
+        assert_eq!(app.session.tools.brush.size, 42.5, "the Brush gets its own back");
+        call(&mut app, &ctx, "ui.set", json!({"tool": "eraser"}));
+        assert_eq!(app.session.tools.brush.size, 12.0);
+        call(&mut app, &ctx, "ui.set", json!({"tool": "brush", "brushSize": 42.5}));
 
         // Values that cannot be represented by BrushSettings must report the command error and
         // leave both the brush and journal unchanged instead of mutating tool state directly.
