@@ -2252,3 +2252,16 @@ fontWeight	Italic	Kurzíva
 # Color Picker warnings
 	Out of gamut for printing: click for the nearest printable colour	Mimo gamut tisku: klepnutím zvolíte nejbližší tisknutelnou barvu
 	Not a web colour: click for the nearest web colour	Není webová barva: klepnutím zvolíte nejbližší webovou barvu
+
+# Eyedropper Sample Size and Sample (#1649).
+	Point Sample	Bodový vzorek
+	3 by 3 Average	Průměr 3 × 3
+	5 by 5 Average	Průměr 5 × 5
+	11 by 11 Average	Průměr 11 × 11
+	31 by 31 Average	Průměr 31 × 31
+	51 by 51 Average	Průměr 51 × 51
+	101 by 101 Average	Průměr 101 × 101
+	Sample Size:	Velikost vzorku:
+	All Layers No Adjustments	Všechny vrstvy bez korekcí
+	Current & Below No Adjustments	Aktuální a pod ní bez korekcí
+	Show Sampling Ring	Zobrazit vzorkovací kroužek

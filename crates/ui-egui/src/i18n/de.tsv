@@ -2291,3 +2291,16 @@ fontWeight	Italic	Kursiv
 # Color Picker warnings
 	Out of gamut for printing: click for the nearest printable colour	Außerhalb des Druckfarbumfangs: Klicken für die nächstliegende druckbare Farbe
 	Not a web colour: click for the nearest web colour	Keine Webfarbe: Klicken für die nächstliegende Webfarbe
+
+# Eyedropper Sample Size and Sample (#1649).
+	Point Sample	Punktprobe
+	3 by 3 Average	3 × 3 Durchschnitt
+	5 by 5 Average	5 × 5 Durchschnitt
+	11 by 11 Average	11 × 11 Durchschnitt
+	31 by 31 Average	31 × 31 Durchschnitt
+	51 by 51 Average	51 × 51 Durchschnitt
+	101 by 101 Average	101 × 101 Durchschnitt
+	Sample Size:	Probengröße:
+	All Layers No Adjustments	Alle Ebenen ohne Anpassungen
+	Current & Below No Adjustments	Aktuelle und darunter ohne Anpassungen
+	Show Sampling Ring	Probenring anzeigen
