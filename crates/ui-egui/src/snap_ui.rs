@@ -256,12 +256,11 @@ fn begin(app: &mut PhotocraftApp, p: [f64; 2], mods: egui::Modifiers) {
     }
     let smart = if matches!(gesture, Gesture::Move { .. }) && smart_on(app) { build(app, &exclude, true) } else { SnapTargets::default() };
     // The Crop tool also snaps its frame to the image's content edges (View › Snap To › Content).
-    let content_src =
-        if snap_on(app) && app.ui.view.snap_to.content && app.ui.tool == Tool::Crop && matches!(gesture, Gesture::Point) {
-            photocraft_engine::magnetic_cmds::EdgeSource::new(&app.session)
-        } else {
-            None
-        };
+    let content_src = if snap_on(app) && app.ui.view.snap_to.content && app.ui.tool == Tool::Crop && matches!(gesture, Gesture::Point) {
+        photocraft_engine::magnetic_cmds::EdgeSource::new(&app.session)
+    } else {
+        None
+    };
     app.prefs_rt.snap = Some(ActiveSnap { gesture, start: p, targets, smart, disabled: false, content_src });
 }
 
@@ -425,8 +424,7 @@ fn crop_handle(app: &PhotocraftApp, p: [f64; 2], mods: egui::Modifiers, targets:
 /// horizontal ones). Before a frame exists the canvas stands in; `None` without a document.
 fn crop_snap_band(app: &PhotocraftApp) -> Option<((f64, f64), (f64, f64))> {
     let canvas = app.session.active().map(|d| d.doc.bounds())?;
-    let [x0, y0, x1, y1] =
-        app.ui.crop_rect.unwrap_or([f64::from(canvas.x0), f64::from(canvas.y0), f64::from(canvas.x1), f64::from(canvas.y1)]);
+    let [x0, y0, x1, y1] = app.ui.crop_rect.unwrap_or([f64::from(canvas.x0), f64::from(canvas.y0), f64::from(canvas.x1), f64::from(canvas.y1)]);
     Some(((y0, y1), (x0, x1)))
 }
 
