@@ -5351,7 +5351,7 @@ version = "0.17.0"
 
 [[package]]
 name = "photocraft-matting"
-version = "0.14.0"
+version = "0.15.1"
 dependencies = [
  "image",
  "log",
