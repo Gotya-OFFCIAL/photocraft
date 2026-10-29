@@ -2698,7 +2698,7 @@ dependencies = [
  "glutin_egl_sys",
  "glutin_glx_sys",
  "glutin_wgl_sys",
- "libloading",
+ "libloading 0.8.9",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
@@ -5351,7 +5351,7 @@ version = "0.17.0"
 
 [[package]]
 name = "photocraft-matting"
-version = "0.15.1"
+version = "0.17.0"
 dependencies = [
  "image",
  "log",
